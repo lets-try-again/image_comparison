@@ -23,32 +23,33 @@ class PairSelectionPolicy(ABC):
 class RandomSelectionPolicy(PairSelectionPolicy):
 
     def __init__(self, n_classes):
-        self.anchors = dict()
         self.pairs = dict()
         self.n_classes = n_classes
 
     def select_anchors(self, x_train: np.array, y_train: np.array) -> dict:
+        """ Selects randomly one array from each class and calls it an anchor """
+
         for cl in range(self.n_classes):
             x_cl = x_train[y_train == cl]
             anchor_ind = np.random.choice(x_cl.shape[0])
             anchor = x_cl[anchor_ind]
-            self.anchors[cl] = anchor
-        return self.anchors
+            anchors[cl] = anchor
+        return anchors
 
     def select_pairs(self, n: int, x_train: np.array, y_train: np.array):
         """ Choose 180 different images from different classes
         and 180 similar images from the same class"""
 
-        for cl, anchor in self.anchors.items():
+        anchors = self.select_anchors(x_train, y_train)
+
+        for cl, anchor in anchors.items():
             x_pos = x_train[y_train == cl]
             x_neg = x_train[y_train != cl]
 
             positive_inds = np.random.choice(x_pos.shape[0], n)
             negative_inds = np.random.choice(x_neg.shape[0], n)
-
             positives = x_pos[positive_inds]
             negatives = x_neg[negative_inds]
-
             self.pairs[anchor] = (cl, positives, negatives)
 
         return self.pairs
