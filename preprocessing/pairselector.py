@@ -46,9 +46,10 @@ class RandomSelectionPolicy(PairSelectionPolicy):
             positive_inds = np.random.choice(x_pos.shape[0], n)
             negative_inds = np.random.choice(x_neg.shape[0], n)
 
-            self.pairs['anchor'] = anchor
-            self.pairs['positives'] = x_pos[positive_inds]
-            self.pairs['negatives'] = x_neg[negative_inds]
+            positives = x_pos[positive_inds]
+            negatives = x_neg[negative_inds]
+
+            self.pairs[anchor] = (cl, positives, negatives)
 
         return self.pairs
 
