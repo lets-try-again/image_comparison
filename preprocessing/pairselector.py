@@ -1,30 +1,56 @@
-import warnings
-
-warnings.filterwarnings("ignore")
-import tensorflow as tf
-import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
+from typing import Dict
+
+# import warnings
+# warnings.filterwarnings("ignore")
+# import tensorflow as tf
+import numpy as np
+import matplotlib.pyplot as plt
 
 
 class PairSelectionPolicy(ABC):
-    """ Triplet selection policy """
+    """ Pair selection policy """
 
     @abstractmethod
-    def select_anchor(self, x_train, y_train):
+    def select_anchors(self, x_train: np.array, y_train: np.array):
         pass
 
     @abstractmethod
-    def select_pair(self, anchor):
+    def select_pairs(self, n: int, x_train: np.array, y_train: np.array):
         pass
 
 
 class RandomSelectionPolicy(PairSelectionPolicy):
 
-    def select_anchor(self, x_train, y_train):
-        pass
+    def __init__(self, n_classes):
+        self.anchors = dict()
+        self.pairs = dict()
+        self.n_classes = n_classes
 
-    def select_pair(self, anchor):
-        pass
+    def select_anchors(self, x_train: np.array, y_train: np.array) -> dict:
+        for cl in range(self.n_classes):
+            x_cl = x_train[y_train == cl]
+            anchor_ind = np.random.choice(x_cl.shape[0])
+            anchor = x_cl[anchor_ind]
+            self.anchors[cl] = anchor
+        return self.anchors
+
+    def select_pairs(self, n: int, x_train: np.array, y_train: np.array):
+        """ Choose 180 different images from different classes
+        and 180 similar images from the same class"""
+
+        for cl, anchor in self.anchors.items():
+            x_pos = x_train[y_train == cl]
+            x_neg = x_train[y_train != cl]
+
+            positive_inds = np.random.choice(x_pos.shape[0], n)
+            negative_inds = np.random.choice(x_neg.shape[0], n)
+
+            self.pairs['anchor'] = anchor
+            self.pairs['positives'] = x_pos[positive_inds]
+            self.pairs['negatives'] = x_neg[negative_inds]
+
+        return self.pairs
 
 
 class KLSelectionPolicy(PairSelectionPolicy):
@@ -32,7 +58,7 @@ class KLSelectionPolicy(PairSelectionPolicy):
     def calculate_KL_divergence(self, anchor):
         pass
 
-    def select_anchor(self, x_train, y_train):
+    def select_anchors(self, x_train, y_train):
         pass
 
     def select_pair(self, anchor):
@@ -52,6 +78,11 @@ To reduce the number. we'll do:
 
 
 if __name__ == '__main__':
+
+    from preprocessing.loader import get_mnist
+
     x_train, y_train, x_test, y_test = get_mnist()
-    print(x_train.shape)
-    print(x_test.shape)
+
+    rsp = RandomSelectionPolicy(n_classes=10)
+    anchors = rsp.select_anchors(x_train, y_train)
+    pairs = rsp.select_pairs(200, x_train, y_train)
