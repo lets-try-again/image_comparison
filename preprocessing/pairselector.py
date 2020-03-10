@@ -28,6 +28,7 @@ class RandomSelectionPolicy(PairSelectionPolicy):
 
     def select_anchors(self, x_train: np.array, y_train: np.array) -> dict:
         """ Selects randomly one array from each class and calls it an anchor """
+        anchors = dict()
 
         for cl in range(self.n_classes):
             x_cl = x_train[y_train == cl]
@@ -50,7 +51,7 @@ class RandomSelectionPolicy(PairSelectionPolicy):
             negative_inds = np.random.choice(x_neg.shape[0], n)
             positives = x_pos[positive_inds]
             negatives = x_neg[negative_inds]
-            self.pairs[anchor] = (cl, positives, negatives)
+            self.pairs[cl] = (anchor, positives, negatives)
 
         return self.pairs
 
@@ -86,5 +87,4 @@ if __name__ == '__main__':
     x_train, y_train, x_test, y_test = get_mnist()
 
     rsp = RandomSelectionPolicy(n_classes=10)
-    anchors = rsp.select_anchors(x_train, y_train)
-    pairs = rsp.select_pairs(200, x_train, y_train)
+    pairs = rsp.select_pairs(5, x_train, y_train)
