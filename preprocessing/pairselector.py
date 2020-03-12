@@ -22,7 +22,7 @@ class PairSelectionPolicy(ABC):
 
 class RandomSelectionPolicy(PairSelectionPolicy):
 
-    def __init__(self, n_classes):
+    def __init__(self, n_classes=10):
         self.pairs = dict()
         self.n_classes = n_classes
 
@@ -67,6 +67,13 @@ class KLSelectionPolicy(PairSelectionPolicy):
     def select_pair(self, anchor):
         pass
 
+
+class DeepOCSVMAnchorSelector:
+    """
+    Most normal and most anomalous in-class examples
+    could determined  by anomaly detection
+    """
+    pass
 
 """
 If there are N = 60,000 train images for 10 classes,
