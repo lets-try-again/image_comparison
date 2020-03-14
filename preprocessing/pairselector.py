@@ -12,43 +12,48 @@ class PairSelectionPolicy(ABC):
     """ Pair selection policy """
 
     @abstractmethod
-    def select_anchors(self, x_train: np.array, y_train: np.array):
+    def select_anchors(self, x: np.array, y: np.array):
         pass
 
     @abstractmethod
-    def select_pairs(self, n: int, x_train: np.array, y_train: np.array):
+    def select_pairs(self, n: int, x: np.array, y: np.array):
         pass
 
 
 class RandomSelectionPolicy(PairSelectionPolicy):
 
-    def __init__(self, n_classes=10):
+    def __init__(self, n_classes=10, random_state=None):
         self.pairs = dict()
         self.n_classes = n_classes
+        self.random_state = random_state
 
-    def select_anchors(self, x_train: np.array, y_train: np.array) -> dict:
+    def select_anchors(self, x: np.array, y: np.array) -> dict:
         """ Selects randomly one array from each class and calls it an anchor """
         anchors = dict()
 
         for cl in range(self.n_classes):
-            x_cl = x_train[y_train == cl]
+            x_cl = x[y == cl]
+            np.random.seed(self.random_state)
             anchor_ind = np.random.choice(x_cl.shape[0])
             anchor = x_cl[anchor_ind]
             anchors[cl] = anchor
         return anchors
 
-    def select_pairs(self, n: int, x_train: np.array, y_train: np.array):
+    def select_pairs(self, n: int, x: np.array, y: np.array):
         """ Choose 180 different images from different classes
         and 180 similar images from the same class"""
 
-        anchors = self.select_anchors(x_train, y_train)
+        anchors = self.select_anchors(x, y)
 
         for cl, anchor in anchors.items():
-            x_pos = x_train[y_train == cl]
-            x_neg = x_train[y_train != cl]
+            x_pos = x[y == cl]
+            x_neg = x[y != cl]
 
+            np.random.seed(self.random_state + 1)
             positive_inds = np.random.choice(x_pos.shape[0], n)
+            np.random.seed(self.random_state + 1)
             negative_inds = np.random.choice(x_neg.shape[0], n)
+
             positives = x_pos[positive_inds]
             negatives = x_neg[negative_inds]
             self.pairs[cl] = (anchor, positives, negatives)
