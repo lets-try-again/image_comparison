@@ -17,7 +17,7 @@ def plot_loss(history):
     ax2.plot(history.history['val_loss'], label='val_loss', dashes=[6, 2])
     ax2.set_xlabel('Epoch')
     ax2.set_ylabel('Loss')
-    ax2.legend(loc='lower right')
+    ax2.legend(loc='top right')
 
     plt.savefig('result.png')
     plt.show()

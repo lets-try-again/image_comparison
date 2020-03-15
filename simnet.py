@@ -19,6 +19,11 @@ from utils.plot_loss import plot_loss
 
 class Encoder(Model):
 
+    """
+    A network that finds a 10-dimensional representation of the input images
+    so that the distances between them minimize the SimNet loss
+    """
+
     def __init__(self):
         super(Encoder, self).__init__()
         self.conv1 = Conv2D(kernel_size=(3, 3), filters=1, padding='Same',
@@ -70,7 +75,7 @@ def load_and_split():
     return train_test_split(x, y, test_size=0.25)
 
 
-def train(model: tf.keras.Model, models_path):
+def train(model: tf.keras.Model, model_path: str, n_epoch: int = 10):
 
     x_train, x_test, y_train, y_test = load_and_split()
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
@@ -80,13 +85,12 @@ def train(model: tf.keras.Model, models_path):
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2,
                                   verbose=1, patience=5, min_lr=0.0001)
 
-    checkpoints_path = models_path + 'encoder.h5'
-    mcp_save = ModelCheckpoint(checkpoints_path,  # {epoch:02d}-{val_loss:.2f}.hdf5
+    mcp_save = ModelCheckpoint(model_path,  # {epoch:02d}-{val_loss:.2f}.hdf5
                                save_best_only=True, monitor='val_loss', mode='min')
 
     # fit and check validation data
     history = model.fit(x_train, y_train,
-                        batch_size=2, epochs=2, workers=8,
+                        batch_size=2, epochs=n_epoch, workers=8,
                         callbacks=[reduce_lr, mcp_save],
                         validation_data=(x_test, y_test))
 
@@ -94,14 +98,15 @@ def train(model: tf.keras.Model, models_path):
     model.summary()
     plot_loss(history)
 
-    # tf.keras.utils.plot_model(model, 'simnet.png', show_shapes=True)
-    return checkpoints_path
+    tf.keras.utils.plot_model(model, 'simnet_model.png', show_shapes=True, expand_nested=True)
 
 
 if __name__ == '__main__':
 
-    models_path = './benchmarks/'
+    model_path = './benchmarks/best_model.h5'
 
     model = Encoder()
-    checkpoint_path = train(model, models_path=models_path)
+    train(model, model_path=model_path, n_epoch=100)
 
+    # Currently loading does not work
+    # model = tf.keras.models.load_model(model_path)
