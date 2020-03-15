@@ -1,12 +1,20 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
+import pickle
 import warnings
 warnings.filterwarnings("ignore")
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import Model, Sequential
+# to run using CPU only
+tf.config.experimental.set_visible_devices([], 'GPU')
+from tensorflow.keras import Model
+from tensorflow.keras.callbacks import ReduceLROnPlateau, ModelCheckpoint
 from tensorflow.keras.layers import Conv2D, Dense, Flatten
-from time import sleep
+from sklearn.model_selection import train_test_split
+
+from preprocessing.loader import get_mnist, Ordering
+from preprocessing.pairselector import RandomSelectionPolicy
+from utils.plot_loss import plot_loss
 
 
 class Encoder(Model):
@@ -30,34 +38,21 @@ class Encoder(Model):
         x = self.dense2(x)
         return x
 
-    @staticmethod
-    @tf.function
-    def distance(x1: np.array, x2: np.array):
-        """ Defines a distance between encoded vectors """
-        print('Calculating distance')
-        d = (x1 - x2)
-        print(f'Shape of d: {d.shape}')
-        return d
-
     @tf.function
     def call(self, pair: np.array) -> float:
         """ Forward pass for a pair of images """
 
-        print(f'Method call() obtained a pair of shape {pair.shape}')
         x1, x2 = pair[:, 0, :, :], pair[:, 1, :, :]
-
-        print(f'Processing x1, x2 with shapes {x1.shape}, {x2.shape}')
         x1 = self.call_encoder(x1)
         x2 = self.call_encoder(x2)
 
-        d = Encoder.distance(x1, x2)
-        return d
+        return x1 - x2
 
 
 @tf.function
-def simnet_loss(distance, target):
+def simnet_loss(difference, target):
 
-    distance = tf.norm(distance)
+    distance = tf.norm(difference)
     loss = (1.0 - target) * tf.square(distance) / 2.0 + \
            target * tf.square(tf.maximum(0.0, 1.0 - distance * distance)) / 2.0
 
@@ -65,38 +60,48 @@ def simnet_loss(distance, target):
     return loss
 
 
-if __name__ == '__main__':
-
-    from preprocessing.loader import get_mnist, Ordering
-    from preprocessing.pairselector import RandomSelectionPolicy
-    from sklearn.model_selection import train_test_split
-
-    from utils.plot_loss import plot_loss
-
-    tf.config.experimental.set_visible_devices([], 'GPU')
-
+def load_and_split():
     # load the data
     x, y = get_mnist()
     # select a pair policy
     pairs = RandomSelectionPolicy(random_state=42).select_pairs(100, x, y)
     x, y = Ordering.get_consecutive_pairs(pairs)
     x = np.expand_dims(x, axis=4)
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25)
+    return train_test_split(x, y, test_size=0.25)
 
-    # create a model
-    model = Encoder()
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=1e-1)
+def train(model: tf.keras.Model, models_path):
 
+    x_train, x_test, y_train, y_test = load_and_split()
+    optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
     model.compile(optimizer=optimizer,
-                  loss=simnet_loss,
-                  metrics=['accuracy'])
+                  loss=simnet_loss)
+
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2,
+                                  verbose=1, patience=5, min_lr=0.0001)
+
+    checkpoints_path = models_path + 'encoder.h5'
+    mcp_save = ModelCheckpoint(checkpoints_path,  # {epoch:02d}-{val_loss:.2f}.hdf5
+                               save_best_only=True, monitor='val_loss', mode='min')
 
     # fit and check validation data
     history = model.fit(x_train, y_train,
-                        batch_size=2, epochs=120, workers=8,
+                        batch_size=2, epochs=2, workers=8,
+                        callbacks=[reduce_lr, mcp_save],
                         validation_data=(x_test, y_test))
 
+    # model.save('./benchmarks/encoder_' + str(np.around(history.history['val_loss'][-1], 3)))
     model.summary()
-    # tf.keras.utils.plot_model(model, 'simnet.png', show_shapes=True)
     plot_loss(history)
+
+    # tf.keras.utils.plot_model(model, 'simnet.png', show_shapes=True)
+    return checkpoints_path
+
+
+if __name__ == '__main__':
+
+    models_path = './benchmarks/'
+
+    model = Encoder()
+    checkpoint_path = train(model, models_path=models_path)
+
