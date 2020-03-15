@@ -5,7 +5,10 @@ warnings.filterwarnings("ignore")
 
 import numpy as np
 import tensorflow as tf
+# to run using CPU only
+tf.config.experimental.set_visible_devices([], 'GPU')
 from tensorflow.keras import Model
+from tensorflow.keras.callbacks import ReduceLROnPlateau, ModelCheckpoint
 from tensorflow.keras.layers import Conv2D, Dense, Flatten
 from sklearn.model_selection import train_test_split
 
@@ -57,36 +60,48 @@ def simnet_loss(difference, target):
     return loss
 
 
-def train(model: tf.keras.Model):
-
+def load_and_split():
     # load the data
     x, y = get_mnist()
     # select a pair policy
     pairs = RandomSelectionPolicy(random_state=42).select_pairs(100, x, y)
     x, y = Ordering.get_consecutive_pairs(pairs)
     x = np.expand_dims(x, axis=4)
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25)
+    return train_test_split(x, y, test_size=0.25)
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
 
+def train(model: tf.keras.Model, models_path):
+
+    x_train, x_test, y_train, y_test = load_and_split()
+    optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
     model.compile(optimizer=optimizer,
                   loss=simnet_loss)
 
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2,
+                                  verbose=1, patience=5, min_lr=0.0001)
+
+    checkpoints_path = models_path + 'encoder.h5'
+    mcp_save = ModelCheckpoint(checkpoints_path,  # {epoch:02d}-{val_loss:.2f}.hdf5
+                               save_best_only=True, monitor='val_loss', mode='min')
+
     # fit and check validation data
     history = model.fit(x_train, y_train,
-                        batch_size=2, epochs=100, workers=8,
+                        batch_size=2, epochs=2, workers=8,
+                        callbacks=[reduce_lr, mcp_save],
                         validation_data=(x_test, y_test))
 
-    model.save('./benchmarks/encoder')
+    # model.save('./benchmarks/encoder_' + str(np.around(history.history['val_loss'][-1], 3)))
     model.summary()
     plot_loss(history)
 
     # tf.keras.utils.plot_model(model, 'simnet.png', show_shapes=True)
+    return checkpoints_path
 
 
 if __name__ == '__main__':
 
-    tf.config.experimental.set_visible_devices([], 'GPU')
+    models_path = './benchmarks/'
 
     model = Encoder()
-    train(model)
+    checkpoint_path = train(model, models_path=models_path)
+
