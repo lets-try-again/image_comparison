@@ -36,7 +36,6 @@ class Encoder(Model):
     @tf.function
     def call_encoder(self, x: np.array) -> np.array:
         """ Forward pass for one image """
-
         x = self.conv1(x)
         x = self.flatten(x)
         x = self.dense1(x)
@@ -53,13 +52,17 @@ class Encoder(Model):
 
         return x1 - x2
 
+    def predict(self, x):
+
+        return tf.nn.sigmoid(tf.reduce_sum(tf.square(x)))
+
 
 @tf.function
 def simnet_loss(difference, target):
 
-    distance = tf.norm(difference)
-    loss = (1.0 - target) * tf.square(distance) / 2.0 + \
-           target * tf.square(tf.maximum(0.0, 1.0 - distance * distance)) / 2.0
+    distance = tf.nn.sigmoid(tf.reduce_sum(tf.square(difference)))
+    loss = (1.0 - target) * distance / 2.0 + \
+           target * tf.square(tf.maximum(0.0, 1.0 - distance)) / 2.0
 
     print(f'Loss: {loss}')
     return loss
@@ -75,9 +78,9 @@ def load_and_split():
     return train_test_split(x, y, test_size=0.25)
 
 
-def train(model: tf.keras.Model, model_path: str, n_epoch: int = 10):
+def train(model: tf.keras.Model, x_train, x_test, y_train, y_test,
+          model_path: str, n_epoch: int = 10):
 
-    x_train, x_test, y_train, y_test = load_and_split()
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
     model.compile(optimizer=optimizer,
                   loss=simnet_loss)
@@ -99,6 +102,7 @@ def train(model: tf.keras.Model, model_path: str, n_epoch: int = 10):
     plot_loss(history)
 
     tf.keras.utils.plot_model(model, 'simnet_model.png', show_shapes=True, expand_nested=True)
+    return model
 
 
 if __name__ == '__main__':
@@ -106,7 +110,13 @@ if __name__ == '__main__':
     model_path = './benchmarks/best_model.h5'
 
     model = Encoder()
-    train(model, model_path=model_path, n_epoch=100)
+    x_train, x_test, y_train, y_test = load_and_split()
+    trained_model = train(model, x_train, x_test, y_train, y_test, model_path=model_path, n_epoch=100)
+
+    out = trained_model.predict(x_test)
+
+    print(out)
+    print(y_test)
 
     # Currently loading does not work
     # model = tf.keras.models.load_model(model_path)
