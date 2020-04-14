@@ -64,7 +64,7 @@ class Encoder(Model):
 
 
 @tf.function
-def simnet_loss(difference, target):
+def simnet_loss(target, difference):
     batch_size = difference.shape[0]
     total_loss = 0
 
@@ -105,7 +105,7 @@ def set_callbacks(model_path=None) -> list:
 def train(model: tf.keras.Model, x_train, x_test, y_train, y_test,
           model_path: str = None, n_epoch: int = 10, batch_size: int = 2):
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=0.05)
     model.compile(optimizer=optimizer,
                   loss=simnet_loss)
 
@@ -128,7 +128,7 @@ if __name__ == '__main__':
     x_train, x_test, y_train, y_test = load_and_split()
 
     # train model
-    history, trained_model = train(model, x_train, x_test, y_train, y_test, n_epoch=10, batch_size=1)
+    history, trained_model = train(model, x_train, x_test, y_train, y_test, n_epoch=20, batch_size=1)
 
     # calculate custom predict function for the test set
     out = trained_model.make_predict(x_test, threshold=0.5)
