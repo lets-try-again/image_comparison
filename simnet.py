@@ -70,7 +70,7 @@ def simnet_loss(difference, target):
 
     for i in range(batch_size):
         distance = tf.nn.sigmoid(tf.reduce_sum(tf.square(difference[i, :])))
-        loss = (1.0 - target) * distance / 2.0 + target * tf.square(tf.maximum(0.0, 1.0 - distance)) / 2.0
+        loss = (1.0 - target) * tf.square(distance) / 2.0 + target * tf.square(tf.maximum(0.0, 1.0 - distance)) / 2.0
         total_loss += loss
 
     average_loss = total_loss / batch_size
