@@ -48,8 +48,8 @@ class Encoder(Model):
         x1, x2 = pair[:, 0, :, :, :], pair[:, 1, :, :, :]
         x1 = self.call_encoder(x1)
         x2 = self.call_encoder(x2)
-
-        return x1 - x2
+        difference = x1 - x2
+        return difference
 
     def make_predict(self, pair, threshold=0.5):
         """ pair must have a shape of
@@ -65,13 +65,17 @@ class Encoder(Model):
 
 @tf.function
 def simnet_loss(difference, target):
+    batch_size = difference.shape[0]
+    total_loss = 0
 
-    distance = tf.nn.sigmoid(tf.reduce_sum(tf.square(difference)))
-    loss = (1.0 - target) * distance / 2.0 + \
-           target * tf.square(tf.maximum(0.0, 1.0 - distance)) / 2.0
+    for i in range(batch_size):
+        distance = tf.nn.sigmoid(tf.reduce_sum(tf.square(difference[i, :])))
+        loss = (1.0 - target) * distance / 2.0 + target * tf.square(tf.maximum(0.0, 1.0 - distance)) / 2.0
+        total_loss += loss
 
-    print(f'Loss: {loss}')
-    return loss
+    average_loss = total_loss / batch_size
+    print(f'Loss: {average_loss}')
+    return average_loss
 
 
 def load_and_split():
@@ -99,7 +103,7 @@ def set_callbacks(model_path=None) -> list:
 
 
 def train(model: tf.keras.Model, x_train, x_test, y_train, y_test,
-          model_path: str = None, n_epoch: int = 10):
+          model_path: str = None, n_epoch: int = 10, batch_size: int = 2):
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
     model.compile(optimizer=optimizer,
@@ -107,7 +111,7 @@ def train(model: tf.keras.Model, x_train, x_test, y_train, y_test,
 
     # fit and check validation data
     history = model.fit(x_train, y_train,
-                        batch_size=2, epochs=n_epoch, workers=8,
+                        batch_size=batch_size, epochs=n_epoch, workers=8,
                         callbacks=set_callbacks(model_path),
                         validation_data=(x_test, y_test))
 
@@ -124,7 +128,7 @@ if __name__ == '__main__':
     x_train, x_test, y_train, y_test = load_and_split()
 
     # train model
-    history, trained_model = train(model, x_train, x_test, y_train, y_test, n_epoch=10)
+    history, trained_model = train(model, x_train, x_test, y_train, y_test, n_epoch=10, batch_size=1)
 
     # calculate custom predict function for the test set
     out = trained_model.make_predict(x_test, threshold=0.5)
