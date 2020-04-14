@@ -45,16 +45,22 @@ class Encoder(Model):
     @tf.function
     def call(self, pair: np.array) -> float:
         """ Forward pass for a pair of images """
-
-        x1, x2 = pair[:, 0, :, :], pair[:, 1, :, :]
+        x1, x2 = pair[:, 0, :, :, :], pair[:, 1, :, :, :]
         x1 = self.call_encoder(x1)
         x2 = self.call_encoder(x2)
 
         return x1 - x2
 
-    def predict(self, x):
+    def make_predict(self, pair, threshold=0.5):
+        """ pair must have a shape of
+        [batch_size (any), 2, 28, 28, 1]
+        """
+        out = self.call(pair)
+        distance_vector = tf.map_fn(lambda x: tf.nn.sigmoid(tf.reduce_sum(tf.square(x))), out)
 
-        return tf.nn.sigmoid(tf.reduce_sum(tf.square(x)))
+        # apply threshold
+        distance_vector = tf.map_fn(lambda x: 0 if x <= threshold else 1, distance_vector)
+        return distance_vector
 
 
 @tf.function
@@ -78,45 +84,52 @@ def load_and_split():
     return train_test_split(x, y, test_size=0.25)
 
 
+def set_callbacks(model_path=None) -> list:
+    # define callbacks
+    cbcks = []
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2,
+                                  verbose=1, patience=5, min_lr=0.0001)
+    cbcks.append(reduce_lr)
+
+    if model_path:
+        mcp_save = ModelCheckpoint(model_path,  # {epoch:02d}-{val_loss:.2f}.hdf5
+                                   save_best_only=True, monitor='val_loss', mode='min')
+        cbcks.append(mcp_save)
+    return cbcks
+
+
 def train(model: tf.keras.Model, x_train, x_test, y_train, y_test,
-          model_path: str, n_epoch: int = 10):
+          model_path: str = None, n_epoch: int = 10):
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
     model.compile(optimizer=optimizer,
                   loss=simnet_loss)
 
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2,
-                                  verbose=1, patience=5, min_lr=0.0001)
-
-    mcp_save = ModelCheckpoint(model_path,  # {epoch:02d}-{val_loss:.2f}.hdf5
-                               save_best_only=True, monitor='val_loss', mode='min')
-
     # fit and check validation data
     history = model.fit(x_train, y_train,
                         batch_size=2, epochs=n_epoch, workers=8,
-                        callbacks=[reduce_lr, mcp_save],
+                        callbacks=set_callbacks(model_path),
                         validation_data=(x_test, y_test))
 
     # model.save('./benchmarks/encoder_' + str(np.around(history.history['val_loss'][-1], 3)))
     model.summary()
-    plot_loss(history)
 
-    tf.keras.utils.plot_model(model, 'simnet_model.png', show_shapes=True, expand_nested=True)
-    return model
+    # tf.keras.utils.plot_model(model, 'simnet_model.png', show_shapes=True, expand_nested=True)
+    return history, model
 
 
 if __name__ == '__main__':
 
-    model_path = './benchmarks/best_model.h5'
-
     model = Encoder()
     x_train, x_test, y_train, y_test = load_and_split()
-    trained_model = train(model, x_train, x_test, y_train, y_test, model_path=model_path, n_epoch=100)
 
-    out = trained_model.predict(x_test)
+    # train model
+    history, trained_model = train(model, x_train, x_test, y_train, y_test, n_epoch=10)
 
-    print(out)
-    print(y_test)
+    # calculate custom predict function for the test set
+    out = trained_model.make_predict(x_test, threshold=0.5)
+    accuracy = tf.keras.metrics.binary_accuracy(out, np.array(y_test))
+    print('Accuracy on the test set:')
+    tf.print(accuracy)
 
-    # Currently loading does not work
-    # model = tf.keras.models.load_model(model_path)
+    # plot_loss(history)
