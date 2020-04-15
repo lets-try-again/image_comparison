@@ -47,13 +47,17 @@ class Encoder(Model):
         difference = x1 - x2
         return difference
 
+    @staticmethod
+    def distance(difference):
+        """ The D function from the paper which is used in loss """
+        return tf.nn.tanh(tf.reduce_sum(tf.square(difference)))
+    
     def make_predict(self, pair, threshold=0.5):
         """ pair must have a shape of
         [batch_size (any), 2, 28, 28, 1]
         """
         out = self.call(pair)
-        distance_vector = tf.map_fn(lambda x: tf.nn.tanh(tf.reduce_sum(tf.square(x))), out)
-
+        distance_vector = tf.map_fn(lambda x: Encoder.distance(x), out)
         # apply threshold
         distance_vector = tf.map_fn(lambda x: 0 if x <= threshold else 1, distance_vector)
         return distance_vector
@@ -61,7 +65,7 @@ class Encoder(Model):
 
 @tf.function
 def custom_accuracy(y_true, y_pred):
-    distance_vector = tf.map_fn(lambda x: tf.nn.tanh(tf.reduce_sum(tf.square(x))), y_pred)
+    distance_vector = tf.map_fn(lambda x: Encoder.distance(x), y_pred)
     distance_vector = tf.map_fn(lambda x: 0.0 if x <= 0.5 else 1.0, distance_vector)
     accuracy = tf.keras.metrics.binary_accuracy(y_true, distance_vector)
     return accuracy
@@ -69,7 +73,7 @@ def custom_accuracy(y_true, y_pred):
 
 @tf.function
 def simnet_loss(target, difference):
-    distance_vector = tf.map_fn(lambda x: tf.nn.tanh(tf.reduce_sum(tf.square(x))), difference)
+    distance_vector = tf.map_fn(lambda x: Encoder.distance(x), difference)
     loss = tf.map_fn(lambda distance: target * tf.square(distance) +
                                       (1.0 - target) * tf.square(1.0 - distance), distance_vector)
     average_loss = tf.reduce_mean(loss)
