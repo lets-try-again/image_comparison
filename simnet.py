@@ -26,19 +26,19 @@ class Encoder(Model):
 
     def __init__(self):
         super(Encoder, self).__init__()
-        self.conv1 = Conv2D(kernel_size=(3, 3), filters=1, padding='Same',
-                            activation='relu', input_shape=(28, 28, 1),
-                            kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        # self.conv1 = Conv2D(kernel_size=(3, 3), filters=1, padding='Same',
+        #                     activation='relu', input_shape=(28, 28, 1),
+        #                     kernel_regularizer=tf.keras.regularizers.l2(0.001))
         self.flatten = Flatten()
-        self.dense1 = Dense(128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        # self.dense1 = Dense(128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001))
         self.dense2 = Dense(10, activation='sigmoid', kernel_regularizer=tf.keras.regularizers.l2(0.001))
 
     @tf.function
     def call_encoder(self, x: np.array) -> np.array:
         """ Forward pass for one image """
-        x = self.conv1(x)
+        # x = self.conv1(x)
         x = self.flatten(x)
-        x = self.dense1(x)
+        # x = self.dense1(x)
         x = self.dense2(x)
         return x
 
@@ -124,8 +124,16 @@ def train(model: tf.keras.Model, x_train, x_test, y_train, y_test,
 
 if __name__ == '__main__':
 
+    from sklearn.preprocessing import StandardScaler
+
     model = Encoder()
     x_train, x_test, y_train, y_test = load_and_split()
+
+    # normalize
+    n = x_train.shape[0] + x_test.shape[0]
+    X = np.concatenate([x_train, x_test]).reshape((n, -1))
+    X_scaled = StandardScaler().fit_transform(X).reshape((n, 2, 28, 28, 1))
+    x_train, x_test = X_scaled[:x_train.shape[0]], X_scaled[x_train.shape[0]:]
 
     # train model
     history, trained_model = train(model, x_train, x_test, y_train, y_test, n_epoch=20, batch_size=1)
@@ -136,4 +144,4 @@ if __name__ == '__main__':
     print('Accuracy on the test set:')
     tf.print(accuracy)
 
-    # plot_loss(history)
+    plot_loss(history)
