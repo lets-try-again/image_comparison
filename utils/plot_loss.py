@@ -1,3 +1,4 @@
+import numpy as np
 import matplotlib.pyplot as plt
 
 
@@ -22,3 +23,12 @@ def plot_loss(history):
     plt.savefig('result.png')
     plt.show()
 
+
+def plot_pair(pair, y=None):
+
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    plt.suptitle(f'A pair of images with y = {int(y)}')
+    ax1.imshow(np.squeeze(pair[0]), cmap='gray')
+    ax2.imshow(np.squeeze(pair[1]), cmap='gray')
+
+    plt.show()

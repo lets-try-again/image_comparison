@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 
 from preprocessing.loader import get_mnist, Ordering
 from preprocessing.pairselector import RandomSelectionPolicy
-from utils.plot_loss import plot_loss
+from utils.plot_loss import plot_loss, plot_pair
 
 
 class Encoder(Model):
@@ -31,7 +31,9 @@ class Encoder(Model):
         #                     kernel_regularizer=tf.keras.regularizers.l2(0.001))
         self.flatten = Flatten()
         # self.dense1 = Dense(128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001))
-        self.dense2 = Dense(10, activation='sigmoid', kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.dense2 = Dense(10, activation='sigmoid',
+                            kernel_initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.5, seed=None),
+                            kernel_regularizer=tf.keras.regularizers.l2(0.0001))
 
     @tf.function
     def call_encoder(self, x: np.array) -> np.array:
@@ -124,7 +126,7 @@ def train(model: tf.keras.Model, x_train, x_test, y_train, y_test,
 
 if __name__ == '__main__':
 
-    from sklearn.preprocessing import StandardScaler
+    from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
     model = Encoder()
     x_train, x_test, y_train, y_test = load_and_split()
@@ -132,11 +134,17 @@ if __name__ == '__main__':
     # normalize
     n = x_train.shape[0] + x_test.shape[0]
     X = np.concatenate([x_train, x_test]).reshape((n, -1))
-    X_scaled = StandardScaler().fit_transform(X).reshape((n, 2, 28, 28, 1))
+    X_scaled = MinMaxScaler().fit_transform(X).reshape((n, 2, 28, 28, 1))
     x_train, x_test = X_scaled[:x_train.shape[0]], X_scaled[x_train.shape[0]:]
 
+    # # plot pair
+    # # these are y == 0 (different)
+    # plot_pair(x_train[-1], y=y_train[-1])
+    # # these are y == 1 (same)
+    # plot_pair(x_train[0], y=y_train[0])
+
     # train model
-    history, trained_model = train(model, x_train, x_test, y_train, y_test, n_epoch=20, batch_size=1)
+    history, trained_model = train(model, x_train, x_test, y_train, y_test, n_epoch=20, batch_size=2)
 
     # calculate custom predict function for the test set
     out = trained_model.make_predict(x_test, threshold=0.5)
