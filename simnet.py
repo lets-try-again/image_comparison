@@ -33,7 +33,7 @@ class Encoder(Model):
         # self.dense1 = Dense(128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001))
         self.dense2 = Dense(10, activation='sigmoid',
                             kernel_initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.5, seed=None),
-                            kernel_regularizer=tf.keras.regularizers.l2(0.0001))
+                            kernel_regularizer=tf.keras.regularizers.l2(0.001))
 
     @tf.function
     def call_encoder(self, x: np.array) -> np.array:
@@ -58,7 +58,7 @@ class Encoder(Model):
         [batch_size (any), 2, 28, 28, 1]
         """
         out = self.call(pair)
-        distance_vector = tf.map_fn(lambda x: tf.nn.sigmoid(tf.reduce_sum(tf.square(x))), out)
+        distance_vector = tf.map_fn(lambda x: tf.nn.tanh(tf.reduce_sum(tf.square(x))), out)
 
         # apply threshold
         distance_vector = tf.map_fn(lambda x: 0 if x <= threshold else 1, distance_vector)
@@ -71,8 +71,8 @@ def simnet_loss(target, difference):
     total_loss = 0
 
     for i in range(batch_size):
-        distance = tf.nn.sigmoid(tf.reduce_sum(tf.square(difference[i, :])))
-        loss = (1.0 - target) * tf.square(distance) / 2.0 + target * tf.square(tf.maximum(0.0, 1.0 - distance)) / 2.0
+        distance = tf.nn.tanh(tf.reduce_sum(tf.square(difference[i, :])))
+        loss = target * tf.square(distance) + (1.0 - target) * tf.square(1.0 - distance)
         total_loss += loss
 
     average_loss = total_loss / batch_size
@@ -126,7 +126,10 @@ def train(model: tf.keras.Model, x_train, x_test, y_train, y_test,
 
 if __name__ == '__main__':
 
+    import sys
     from sklearn.preprocessing import StandardScaler, MinMaxScaler
+
+    np.set_printoptions(suppress=True)
 
     model = Encoder()
     x_train, x_test, y_train, y_test = load_and_split()
@@ -144,10 +147,14 @@ if __name__ == '__main__':
     # plot_pair(x_train[0], y=y_train[0])
 
     # train model
-    history, trained_model = train(model, x_train, x_test, y_train, y_test, n_epoch=20, batch_size=2)
+    history, trained_model = train(model, x_train, x_test, y_train, y_test, n_epoch=500, batch_size=2)
 
     # calculate custom predict function for the test set
     out = trained_model.make_predict(x_test, threshold=0.5)
+
+    print(np.array(out))
+    print(y_test)
+
     accuracy = tf.keras.metrics.binary_accuracy(out, np.array(y_test))
     print('Accuracy on the test set:')
     tf.print(accuracy)
