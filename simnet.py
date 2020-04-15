@@ -8,11 +8,9 @@ tf.config.experimental.set_visible_devices([], 'GPU')
 from tensorflow.keras import Model
 from tensorflow.keras.callbacks import ReduceLROnPlateau, ModelCheckpoint
 from tensorflow.keras.layers import Conv2D, Dense, Flatten, MaxPooling2D
-from sklearn.model_selection import train_test_split
 
-from preprocessing.loader import get_mnist, Ordering
-from preprocessing.pairselector import RandomSelectionPolicy
 from preprocessing.scaler import shrink
+from preprocessing.loader import load_and_split
 from utils.plot_utils import plot_loss, plot_pair
 
 
@@ -78,30 +76,6 @@ def simnet_loss(target, difference):
     return average_loss
 
 
-def load_and_split(n_pairs=5000):
-    # load the data
-    x, y = get_mnist()
-    # select a pair policy
-    pairs = RandomSelectionPolicy(random_state=42).select_pairs(n_pairs, x, y)
-    x, y = Ordering.get_consecutive_pairs(pairs)
-    x = np.expand_dims(x, axis=4)
-    return train_test_split(x, y, test_size=0.25)
-
-
-def set_callbacks(model_path=None) -> list:
-    # define callbacks
-    cbcks = []
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2,
-                                  verbose=1, patience=5, min_lr=0.01)
-    cbcks.append(reduce_lr)
-
-    if model_path:
-        mcp_save = ModelCheckpoint(model_path,  # {epoch:02d}-{val_loss:.2f}.hdf5
-                                   save_best_only=True, monitor='val_loss', mode='min')
-        cbcks.append(mcp_save)
-    return cbcks
-
-
 def train(model: tf.keras.Model, x_train, x_test, y_train, y_test,
           model_path: str = None, n_epoch: int = 10, batch_size: int = 2):
 
@@ -113,7 +87,7 @@ def train(model: tf.keras.Model, x_train, x_test, y_train, y_test,
     # fit and check validation data
     history = model.fit(x_train, y_train,
                         batch_size=batch_size, epochs=n_epoch, workers=8,
-                        callbacks=set_callbacks(model_path),
+                        # callbacks=set_callbacks(model_path),
                         validation_data=(x_test, y_test))
 
     # model.save('./benchmarks/encoder_' + str(np.around(history.history['val_loss'][-1], 3)))
@@ -154,3 +128,16 @@ if __name__ == '__main__':
     # plot_pair(x_train[-1], y=y_train[-1])
     # # these are y == 1 (same)
     # plot_pair(x_train[0], y=y_train[0])
+
+    # def set_callbacks(model_path=None) -> list:
+    #     # define callbacks
+    #     cbcks = []
+    #     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2,
+    #                                   verbose=1, patience=5, min_lr=0.01)
+    #     cbcks.append(reduce_lr)
+    #
+    #     if model_path:
+    #         mcp_save = ModelCheckpoint(model_path,  # {epoch:02d}-{val_loss:.2f}.hdf5
+    #                                    save_best_only=True, monitor='val_loss', mode='min')
+    #         cbcks.append(mcp_save)
+    #     return cbcks

@@ -3,6 +3,9 @@ from typing import List, Tuple
 warnings.filterwarnings("ignore")
 import numpy as np
 import tensorflow as tf
+from sklearn.model_selection import train_test_split
+
+from preprocessing.pairselector import RandomSelectionPolicy
 
 
 def get_mnist():
@@ -32,5 +35,12 @@ class Ordering:
         return x_train, y_train
 
 
-if __name__ == '__main__':
-    x_train, y_train, x_test, y_test = get_mnist()
+def load_and_split(n_pairs=5000):
+    # load the data
+    x, y = get_mnist()
+    # select a pair policy
+    pairs = RandomSelectionPolicy(random_state=42).select_pairs(n_pairs, x, y)
+    x, y = Ordering.get_consecutive_pairs(pairs)
+    x = np.expand_dims(x, axis=4)
+    return train_test_split(x, y, test_size=0.25)
+
