@@ -28,7 +28,7 @@ class Encoder(Model):
                          kernel_initializer='he_uniform', input_shape=(28, 28, 1))
         self.pool = MaxPooling2D((2, 2))
         self.flatten = Flatten()
-        self.dense = Dense(100, activation='sigmoid',
+        self.dense = Dense(3, activation='sigmoid',
                            kernel_regularizer=tf.keras.regularizers.l2(0.001))
 
     @tf.function
@@ -72,8 +72,8 @@ def custom_accuracy(y_true, y_pred):
 @tf.function
 def simnet_loss(target, difference):
     distance_vector = tf.map_fn(lambda x: tf.nn.tanh(tf.reduce_sum(tf.square(x))), difference)
-    loss = - tf.map_fn(lambda distance: target * tf.square(distance) +
-                                        (1.0 - target) * tf.square(1.0 - distance), distance_vector)
+    loss = tf.map_fn(lambda distance: target * tf.square(distance) +
+                                      (1.0 - target) * tf.square(1.0 - distance), distance_vector)
     average_loss = tf.reduce_mean(loss)
     return average_loss
 
@@ -133,7 +133,7 @@ if __name__ == '__main__':
 
     # train model
     history, trained_model = train(model, x_train, x_test, y_train, y_test,
-                                   n_epoch=1, batch_size=16)
+                                   n_epoch=10, batch_size=16)
 
     # plot_loss(history)
 
