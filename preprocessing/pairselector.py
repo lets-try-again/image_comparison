@@ -40,8 +40,8 @@ class RandomSelectionPolicy(PairSelectionPolicy):
         return anchors
 
     def select_pairs(self, n: int, x: np.array, y: np.array):
-        """ Choose 180 different images from different classes
-        and 180 similar images from the same class"""
+        """ Choose n different images from different classes
+        and n similar images from the same class"""
 
         anchors = self.select_anchors(x, y)
 
