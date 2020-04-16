@@ -1,5 +1,22 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from datetime import datetime
+
+
+now = datetime.now().strftime('%d%b%H-%M')
+
+
+def plot_pair(pair, y=None):
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    plt.suptitle(f'A pair of images with y = {int(y)}')
+    ax1.imshow(np.squeeze(pair[0]), cmap='gray')
+    ax2.imshow(np.squeeze(pair[1]), cmap='gray')
+
+
+def plot_embedding(points: np.array):
+    fig, ax = plt.subplots(1, 1)
+    ax.scatter(points[:, 0], points[:, 1], s=0.3, alpha=0.4)
+    plt.savefig(f'./data/embedding_plots/embedding_{now}.png')
 
 
 def plot_loss(history):
@@ -20,15 +37,4 @@ def plot_loss(history):
     ax2.set_ylabel('Loss')
     ax2.legend(loc='top right')
 
-    plt.savefig('result.png')
-    plt.show()
-
-
-def plot_pair(pair, y=None):
-
-    fig, (ax1, ax2) = plt.subplots(1, 2)
-    plt.suptitle(f'A pair of images with y = {int(y)}')
-    ax1.imshow(np.squeeze(pair[0]), cmap='gray')
-    ax2.imshow(np.squeeze(pair[1]), cmap='gray')
-
-    plt.show()
+    plt.savefig(f'./data/loss_plots/loss_result_{now}.png')
