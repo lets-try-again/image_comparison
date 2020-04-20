@@ -40,7 +40,7 @@ class Encoder(Model):
                            kernel_regularizer=tf.keras.regularizers.l2(0.01))
 
     @tf.function
-    def call_encoder(self, x):
+    def call(self, x):
         """ Forward pass for one image """
         x = self.cv(x)
         x = self.pool(x)
@@ -49,15 +49,6 @@ class Encoder(Model):
         x = self.flatten(x)
         x = self.dense(x)
         return x
-
-    @tf.function
-    def call(self, pair):
-        """ Forward pass for a pair of images """
-        x1, x2 = pair[:, 0, :, :, :], pair[:, 1, :, :, :]
-        x1 = self.call_encoder(x1)
-        x2 = self.call_encoder(x2)
-        difference = x1 - x2
-        return difference
 
     @staticmethod
     def distance(difference):
@@ -71,7 +62,10 @@ class Encoder(Model):
         """ pair must have a shape of
         [batch_size (any), 2, 28, 28, 1]
         """
-        out = self.call(pair)
+        x1, x2 = pair[:, 0, :, :, :], pair[:, 1, :, :, :]
+        x1 = self.call(x1)
+        x2 = self.call(x2)
+        out = x2 - x1
         distance_vector = tf.map_fn(lambda x: Encoder.distance(x), out)
         # apply threshold
         distance_vector = tf.map_fn(lambda x: 0.0 if x <= threshold else 1.0, distance_vector)
@@ -87,7 +81,8 @@ def custom_accuracy(y_true, y_pred):
 
 
 @tf.function
-def simnet_loss(target, difference):
+def simnet_loss(target, x1, x2):
+    difference = x1 - x2
     distance_vector = tf.map_fn(lambda x: Encoder.distance(x), difference)
     loss = tf.map_fn(lambda distance: target * tf.square(distance) +
                                       (1.0 - target) * tf.square(tf.maximum(0.0, 1.0 - distance)), distance_vector)
@@ -98,25 +93,29 @@ def simnet_loss(target, difference):
 @tf.function
 def train_step(images, labels):
     with tf.GradientTape() as tape:
-        predictions = model(images)
-        loss = simnet_loss(labels, predictions)
+        x1, x2 = images[:, 0, :, :, :], images[:, 1, :, :, :]
+        x1 = model(x1)
+        x2 = model(x2)
+        loss = simnet_loss(labels, x1, x2)
     gradients = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
-    tf.print(f"Loss:", loss, output_stream=sys.stdout)
+    return loss
 
 
 @tf.function
-def test_step(x_test, y_test, label='test'):
+def test_step(x_test, y_test):
     out = model.make_predict(x_test, threshold=0.5)
     accuracy = tf.keras.metrics.binary_accuracy(out, y_test)
-    tf.print(f"Accuracy on the {label} set:", accuracy, output_stream=sys.stdout)
+    return accuracy
 
 
 if __name__ == '__main__':
 
-    n_total_pairs = 8000
+    n_total_pairs = 20000
     n_epoch = 10
+    batch_size = 180
+    learning_rate = 0.02
 
     n_pairs = int(np.sqrt(n_total_pairs / 2))
     # print(f'Calling pair selector with n = {n_pairs}')
@@ -127,15 +126,23 @@ if __name__ == '__main__':
     # print('Percentage of similar images', np.round(y_train.sum()/y_train.shape[0], 3))
 
     model = Encoder()
-    optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
-    model.build(input_shape=(None, 2, 28, 28, 1))
+    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    model.build(input_shape=(None, 28, 28, 1))
     model.summary()
 
     for epoch in range(n_epoch):
-        print(f'epoch {epoch + 1}')
-        train_step(x_train, y_train)
-        test_step(x_train, y_train, label='train')
-        test_step(x_test, y_test)
+        epoch_loss = 0
+        n_batches = int(x_train.shape[0]/batch_size)
+        for indices in np.array_split(np.arange(x_train.shape[0]), indices_or_sections=n_batches):
+            x = np.take(x_train, indices, axis=0)
+            y = np.take(y_train, indices, axis=0)
+            epoch_loss += train_step(x, y)
+
+        epoch_loss = epoch_loss / n_batches
+        accuracy = test_step(x_train, y_train)
+        val_accuracy = test_step(x_test, y_test)
+        tf.print("epoch:", epoch, "loss:", epoch_loss, "accuracy:", accuracy,
+                 "val_accuracy:", val_accuracy, output_stream=sys.stdout)
 
     # plot embedding of encoded images
     images = x_train.reshape((x_train.shape[0] * x_train.shape[1], 28, 28, 1))
