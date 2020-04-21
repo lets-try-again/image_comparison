@@ -1,14 +1,12 @@
 from __future__ import absolute_import
 from __future__ import print_function
 import numpy as np
+import matplotlib.pyplot as plt
 
-import random
-from keras.datasets import mnist
 from keras.models import Model
 from keras.layers import Input, Flatten, Dense, Dropout, Lambda
 from keras.optimizers import RMSprop
 from keras import backend as K
-
 
 from preprocessing.scaler import shrink
 from preprocessing.loader import load_and_split
@@ -36,9 +34,9 @@ def contrastive_loss(y_true, y_pred):
     Contrastive loss from Hadsell-et-al.'06
     http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
     '''
-    margin = 1
+    margin = 1.0
     square_pred = K.square(y_pred)
-    margin_square = K.square(K.maximum(margin - y_pred, 0))
+    margin_square = K.square(K.maximum(margin - y_pred, 0.0))
     return K.mean(y_true * square_pred + (1 - y_true) * margin_square)
 
 
@@ -51,7 +49,8 @@ def create_base_network(input_shape):
     x = Dense(128, activation='relu')(x)
     x = Dropout(0.1)(x)
     x = Dense(128, activation='relu')(x)
-    return Model(input, x)
+    return Model(input, x, name='encoder')
+
 
 def compute_accuracy(y_true, y_pred):
     '''Compute classification accuracy with a fixed threshold on distances.'''
@@ -66,9 +65,10 @@ def accuracy(y_true, y_pred):
 
 if __name__ == '__main__':
 
-    n_total_pairs = 20000
+    n_total_pairs = 10000
     n_pairs = int(np.sqrt(n_total_pairs / 2))
     x_train, x_test, y_train, y_test = load_and_split(n_pairs=n_pairs, n_classes=2)
+    x_train, x_test = shrink(x_train, x_test)
     input_shape = (28, 28)
 
     # network definition
@@ -84,6 +84,8 @@ if __name__ == '__main__':
                       output_shape=eucl_dist_output_shape)([processed_a, processed_b])
 
     model = Model([input_a, input_b], distance)
+    functor = K.function([input_a, input_b] + [K.learning_phase()], [processed_a, processed_b])
+
     # train
     rms = RMSprop()
     model.compile(loss=contrastive_loss, optimizer=rms, metrics=[accuracy])
@@ -91,6 +93,16 @@ if __name__ == '__main__':
               batch_size=128,
               epochs=epochs,
               validation_data=([x_test[:, 0, :, :, 0], x_test[:, 1, :, :, 0]], y_test))
+
+    # plot embedding of encoded images
+    embeddings_of_train = functor([[x_train[:, 0, :, :, 0], x_train[:, 1, :, :, 0]], 1])
+    embeddings_of_train = np.concatenate(embeddings_of_train)
+    print(embeddings_of_train.shape)
+    if embeddings_of_train.shape[1] > 2:
+        print('Applying t-SNE')
+        embeddings_of_test = reduce_dim(np.array(embeddings_of_train))
+    plot_embedding(embeddings_of_train)
+    plt.show()
 
     # # compute final accuracy on training and test sets
     # y_pred = model.predict([tr_pairs[:, 0], tr_pairs[:, 1]])
