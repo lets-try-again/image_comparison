@@ -28,11 +28,12 @@ def euclidean_distance(vects):
 
 def eucl_dist_output_shape(shapes):
     shape1, shape2 = shapes
-    return (shape1[0], 1)
+    return shape1[0], 1
 
 
 def contrastive_loss(y_true, y_pred):
-    '''Contrastive loss from Hadsell-et-al.'06
+    '''
+    Contrastive loss from Hadsell-et-al.'06
     http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
     '''
     margin = 1
@@ -41,29 +42,8 @@ def contrastive_loss(y_true, y_pred):
     return K.mean(y_true * square_pred + (1 - y_true) * margin_square)
 
 
-def create_pairs(x, digit_indices):
-    '''Positive and negative pair creation.
-    Alternates between positive and negative pairs.
-    '''
-    pairs = []
-    labels = []
-    n = min([len(digit_indices[d]) for d in range(num_classes)]) - 1
-    for d in range(num_classes):
-        for i in range(n):
-            z1, z2 = digit_indices[d][i], digit_indices[d][i + 1]
-            pairs += [[x[z1], x[z2]]]
-            inc = random.randrange(1, num_classes)
-            dn = (d + inc) % num_classes
-            z1, z2 = digit_indices[d][i], digit_indices[dn][i]
-            pairs += [[x[z1], x[z2]]]
-            labels += [1, 0]
-            # print(f'return n1 {np.array(pairs).shape}, return n2 {np.array(labels).shape}')
-    return np.array(pairs), np.array(labels)
-
-
 def create_base_network(input_shape):
-    '''Base network to be shared (eq. to feature extraction).
-    '''
+    '''Base network to be shared (eq. to feature extraction).'''
     input = Input(shape=input_shape)
     x = Flatten()(input)
     x = Dense(128, activation='relu')(x)
@@ -74,68 +54,49 @@ def create_base_network(input_shape):
     return Model(input, x)
 
 def compute_accuracy(y_true, y_pred):
-    '''Compute classification accuracy with a fixed threshold on distances.
-    '''
+    '''Compute classification accuracy with a fixed threshold on distances.'''
     pred = y_pred.ravel() < 0.5
     return np.mean(pred == y_true)
 
 
 def accuracy(y_true, y_pred):
-    '''Compute classification accuracy with a fixed threshold on distances.
-    '''
+    '''Compute classification accuracy with a fixed threshold on distances.'''
     return K.mean(K.equal(y_true, K.cast(y_pred < 0.5, y_true.dtype)))
 
 
-# the data, split between train and test sets
-(x_train, y_train), (x_test, y_test) = mnist.load_data()
-x_train = x_train.astype('float32')
-x_test = x_test.astype('float32')
-x_train /= 255
-x_test /= 255
-input_shape = x_train.shape[1:]
+if __name__ == '__main__':
 
-# create training+test positive and negative pairs
-digit_indices = [np.where(y_train == i)[0] for i in range(num_classes)]
-tr_pairs, tr_y = create_pairs(x_train, digit_indices)
+    n_total_pairs = 20000
+    n_pairs = int(np.sqrt(n_total_pairs / 2))
+    x_train, x_test, y_train, y_test = load_and_split(n_pairs=n_pairs, n_classes=2)
+    input_shape = (28, 28)
 
-digit_indices = [np.where(y_test == i)[0] for i in range(num_classes)]
-te_pairs, te_y = create_pairs(x_test, digit_indices)
+    # network definition
+    base_network = create_base_network(input_shape)
 
-# network definition
-base_network = create_base_network(input_shape)
+    input_a = Input(shape=input_shape)
+    input_b = Input(shape=input_shape)
 
-input_a = Input(shape=input_shape)
-input_b = Input(shape=input_shape)
+    processed_a = base_network(input_a)
+    processed_b = base_network(input_b)
 
-# because we re-use the same instance `base_network`,
-# the weights of the network
-# will be shared across the two branches
-processed_a = base_network(input_a)
-processed_b = base_network(input_b)
+    distance = Lambda(euclidean_distance,
+                      output_shape=eucl_dist_output_shape)([processed_a, processed_b])
 
-distance = Lambda(euclidean_distance,
-                  output_shape=eucl_dist_output_shape)([processed_a, processed_b])
+    model = Model([input_a, input_b], distance)
+    # train
+    rms = RMSprop()
+    model.compile(loss=contrastive_loss, optimizer=rms, metrics=[accuracy])
+    model.fit([x_train[:, 0, :, :, 0], x_train[:, 1, :, :, 0]], y_train,
+              batch_size=128,
+              epochs=epochs,
+              validation_data=([x_test[:, 0, :, :, 0], x_test[:, 1, :, :, 0]], y_test))
 
-n_total_pairs = 20000
-n_pairs = int(np.sqrt(n_total_pairs / 2))
-x_train, x_test, y_train, y_test = load_and_split(n_pairs=n_pairs, n_classes=2)
-
-
-
-model = Model([input_a, input_b], distance)
-# train
-rms = RMSprop()
-model.compile(loss=contrastive_loss, optimizer=rms, metrics=[accuracy])
-model.fit([x_train[:, 0, :, :, :], x_train[:, 1, :, :, :]], y_train,
-          batch_size=128,
-          epochs=epochs,
-          validation_data=([x_test[:, 0, :, :, :], x_test[:, 1, :, :, :]], y_test))
-
-# # compute final accuracy on training and test sets
-# y_pred = model.predict([tr_pairs[:, 0], tr_pairs[:, 1]])
-# tr_acc = compute_accuracy(tr_y, y_pred)
-# y_pred = model.predict([te_pairs[:, 0], te_pairs[:, 1]])
-# te_acc = compute_accuracy(te_y, y_pred)
-#
-# print('* Accuracy on training set: %0.2f%%' % (100 * tr_acc))
-# print('* Accuracy on test set: %0.2f%%' % (100 * te_acc))
+    # # compute final accuracy on training and test sets
+    # y_pred = model.predict([tr_pairs[:, 0], tr_pairs[:, 1]])
+    # tr_acc = compute_accuracy(tr_y, y_pred)
+    # y_pred = model.predict([te_pairs[:, 0], te_pairs[:, 1]])
+    # te_acc = compute_accuracy(te_y, y_pred)
+    #
+    # print('* Accuracy on training set: %0.2f%%' % (100 * tr_acc))
+    # print('* Accuracy on test set: %0.2f%%' % (100 * te_acc))
